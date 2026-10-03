@@ -11,6 +11,10 @@ saha_targets() {
 orin-nx-16g-p3768|p3768-0000-p3767-0000|Jetson Orin NX 16GB P3767-0000 module in P3768 carrier
 agx-thor-devkit|jetson-agx-thor-devkit|AGX Thor devkit P3834-0008 module in P4071-0000 carrier with NVMe
 agx-orin-devkit|jetson-agx-orin-devkit|AGX Orin devkit P3701-0000 module in P3737-0000 carrier
+rdk-x5|rdk-x5|D-Robotics RDK X5 development board
+iq-9075-evk|iq-9075-evk|Qualcomm Dragonwing IQ-9075 Evaluation Kit
+radxa-zero-3w|radxa-zero-3w|Radxa ZERO 3W RK3566 Microduck board
+orangepi-zero3w|orangepi-zero3w|Orange Pi Zero 3W Allwinner A733 Microduck board
 TARGETS
 }
 
@@ -81,7 +85,22 @@ saha_require_ros_distro() {
 }
 
 saha_current_ros_distro() {
+  if saha_is_microduck_target "${1:-}"; then
+    if [ "${SAHA_ROS_DISTRO:-none}" != "none" ]; then
+      printf 'Microduck targets require SAHA_ROS_DISTRO=none (default)\n' >&2
+      return 2
+    fi
+    printf '%s\n' "none"
+    return 0
+  fi
   saha_require_ros_distro "${SAHA_ROS_DISTRO:-$(saha_default_ros_distro)}"
+}
+
+saha_is_microduck_target() {
+  case "$1" in
+    radxa-zero-3w|orangepi-zero3w) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 saha_default_homeassistant() {
@@ -119,17 +138,121 @@ saha_homeassistant_enabled() {
   esac
 }
 
+saha_x5_accelerators_mode() {
+  case "${SAHA_X5_ACCELERATORS:-0}" in
+    ""|0)
+      printf '%s\n' "0"
+      ;;
+    1)
+      printf '%s\n' "1"
+      ;;
+    *)
+      printf 'SAHA_X5_ACCELERATORS must be 0 or 1 (received: %s)\n' \
+        "${SAHA_X5_ACCELERATORS:-}" >&2
+      return 2
+      ;;
+  esac
+}
+
 saha_kas_config_for_target() {
   local target=$1
-  local ros_distro
-  local kas_config
-  ros_distro="$(saha_current_ros_distro)" || return $?
+  local ros_distro x5_accelerators kas_config
+  ros_distro="$(saha_current_ros_distro "$target")" || return $?
+  x5_accelerators="$(saha_x5_accelerators_mode)" || return $?
+
+  if saha_is_microduck_target "$target"; then
+    if [ "$x5_accelerators" = "1" ]; then
+      printf 'SAHA_X5_ACCELERATORS is supported only for rdk-x5\n' >&2
+      return 2
+    fi
+    SAHA_HOMEASSISTANT="${SAHA_HOMEASSISTANT:-0}" saha_require_homeassistant_setting || return $?
+    if SAHA_HOMEASSISTANT="${SAHA_HOMEASSISTANT:-0}" saha_homeassistant_enabled; then
+      printf 'Microduck targets require SAHA_HOMEASSISTANT=0 (default)\n' >&2
+      return 2
+    fi
+    printf 'kas/targets/%s.yml\n' "$target"
+    return 0
+  fi
+
+  if [ "$target" = "rdk-x5" ]; then
+    if [ "$ros_distro" != "jazzy" ]; then
+      printf 'RDK X5 supports only ROS 2 Jazzy (requested: %s)\n' "$ros_distro" >&2
+      return 2
+    fi
+    if [ "$x5_accelerators" = "1" ]; then
+      printf 'kas/targets/rdk-x5.yml:kas/include/rdk-x5-accelerators.yml\n'
+      return 0
+    fi
+    printf 'kas/targets/rdk-x5.yml\n'
+    return 0
+  fi
+
+  if [ "$target" = "iq-9075-evk" ]; then
+    if [ "$x5_accelerators" = "1" ]; then
+      printf 'SAHA_X5_ACCELERATORS is supported only for rdk-x5\n' >&2
+      return 2
+    fi
+    if [ "$ros_distro" != "jazzy" ]; then
+      printf 'IQ-9075 EVK supports only ROS 2 Jazzy (requested: %s)\n' "$ros_distro" >&2
+      return 2
+    fi
+    saha_require_homeassistant_setting || return $?
+    kas_config="kas/targets/iq-9075-evk.yml"
+    if saha_homeassistant_enabled; then
+      kas_config="${kas_config}:kas/include/homeassistant-container.yml"
+    fi
+    printf '%s\n' "$kas_config"
+    return 0
+  fi
+
+  if [ "$x5_accelerators" = "1" ]; then
+    printf 'SAHA_X5_ACCELERATORS is supported only for rdk-x5\n' >&2
+    return 2
+  fi
+
   saha_require_homeassistant_setting || return $?
   kas_config="kas/targets/${target}.yml:kas/include/ros-distro-${ros_distro}.yml"
   if saha_homeassistant_enabled; then
     kas_config="${kas_config}:kas/include/homeassistant-container.yml"
   fi
   printf '%s\n' "$kas_config"
+}
+
+saha_meta_d_robotics_dir() {
+  local requested=${SAHA_META_D_ROBOTICS_DIR:-}
+
+  if [ -z "$requested" ]; then
+    printf 'SAHA_META_D_ROBOTICS_DIR must point to meta-d-robotics for rdk-x5\n' >&2
+    return 2
+  fi
+  if [ ! -d "$requested" ]; then
+    printf 'SAHA_META_D_ROBOTICS_DIR is not a directory: %s\n' "$requested" >&2
+    return 2
+  fi
+
+  (cd -- "$requested" >/dev/null 2>&1 && pwd -P)
+}
+
+saha_meta_allwinner_dir() {
+  local root_dir=$1
+  local requested=${SAHA_META_ALLWINNER_DIR:-"$root_dir/../meta-allwinner"}
+
+  if [ ! -r "$requested/conf/layer.conf" ] ||
+     ! grep -Eq 'BBFILE_COLLECTIONS.*["[:space:]]allwinner(["[:space:]]|$)' "$requested/conf/layer.conf"; then
+    printf 'SAHA_META_ALLWINNER_DIR must point to an Allwinner BSP layer (default: %s/../meta-allwinner): %s\n' "$root_dir" "$requested" >&2
+    return 2
+  fi
+  (cd -- "$requested" >/dev/null 2>&1 && pwd -P)
+}
+
+saha_validate_target_inputs() {
+  local target=$1
+
+  if [ "$target" = "rdk-x5" ]; then
+    saha_meta_d_robotics_dir >/dev/null
+  elif [ "$target" = "orangepi-zero3w" ]; then
+    saha_meta_allwinner_dir "$(saha_repo_root)" >/dev/null
+  fi
 }
 
 saha_image_name() {
@@ -149,17 +272,69 @@ saha_prepare_docker_env() {
 saha_build_dir() {
   local root_dir=$1
   local target=$2
-  local ros_distro
+  local ros_distro x5_accelerators
+  x5_accelerators="$(saha_x5_accelerators_mode)" || return $?
   if [ -n "${SAHA_BUILD_DIR:-}" ]; then
     printf '%s\n' "$SAHA_BUILD_DIR"
     return 0
   fi
-  ros_distro="$(saha_current_ros_distro)" || return $?
-  if [ "$ros_distro" = "$(saha_default_ros_distro)" ]; then
+  if [ "$target" = "rdk-x5" ] && [ "$x5_accelerators" = "1" ]; then
+    printf '%s\n' "$root_dir/build/rdk-x5-accelerators"
+    return 0
+  fi
+  ros_distro="$(saha_current_ros_distro "$target")" || return $?
+  if [ "$ros_distro" = "none" ] || [ "$ros_distro" = "$(saha_default_ros_distro)" ]; then
     printf '%s\n' "$root_dir/build/$target"
     return 0
   fi
   printf '%s\n' "$root_dir/build/$target-ros-$ros_distro"
+}
+
+saha_prepare_microduck_release() {
+  local root_dir=$1
+  local target=$2
+  local prefer_existing=${3:-0}
+  saha_is_microduck_target "$target" || return 0
+
+  local build_dir release_lock release
+  build_dir="$(saha_build_dir "$root_dir" "$target")" || return $?
+  release_lock=${SAHA_MICRODUCK_RELEASE_LOCK:-}
+  release=${SAHA_MICRODUCK_RELEASE:-latest}
+  if [ -n "$release_lock" ] && [ -n "${SAHA_MICRODUCK_RELEASE:-}" ]; then
+    printf 'Set only one of SAHA_MICRODUCK_RELEASE and SAHA_MICRODUCK_RELEASE_LOCK\n' >&2
+    return 2
+  fi
+  if [ "$prefer_existing" = "1" ] && [ -z "$release_lock" ] &&
+     [ -z "${SAHA_MICRODUCK_RELEASE:-}" ] &&
+     [ -f "$build_dir/conf/microduck-release.lock.json" ]; then
+    release_lock="$build_dir/conf/microduck-release.lock.json"
+  fi
+
+  local resolve_cmd=(python3 "$root_dir/scripts/resolve-microduck-release.py"
+                     --output-dir "$build_dir/conf")
+  if [ -n "$release_lock" ]; then
+    resolve_cmd+=(--lock "$release_lock")
+  else
+    resolve_cmd+=(--release "$release")
+  fi
+  if [ "${SAHA_DRY_RUN:-0}" = "1" ]; then
+    printf '%q ' "${resolve_cmd[@]}"
+    printf '\n'
+    return 0
+  fi
+  "${resolve_cmd[@]}"
+}
+
+saha_container_build_dir() {
+  local target=$1
+  local x5_accelerators
+  x5_accelerators="$(saha_x5_accelerators_mode)" || return $?
+
+  if [ "$target" = "rdk-x5" ] && [ "$x5_accelerators" = "1" ]; then
+    printf '%s\n' "/work/build/rdk-x5-accelerators"
+    return 0
+  fi
+  printf '%s\n' "/work/build/$target"
 }
 
 saha_downloads_dir() {
@@ -300,11 +475,18 @@ saha_docker_args() {
   local root_dir=$1
   local target=$2
   local interactive=$3
-  local build_dir downloads_dir sstate_dir image
+  local build_dir container_build_dir downloads_dir sstate_dir image meta_d_robotics_dir meta_allwinner_dir
   build_dir="$(saha_build_dir "$root_dir" "$target")" || return $?
+  container_build_dir="$(saha_container_build_dir "$target")" || return $?
   downloads_dir="$(saha_downloads_dir "$root_dir")"
   sstate_dir="$(saha_sstate_dir "$root_dir")"
   image="$(saha_image_name)"
+
+  if [ "$target" = "rdk-x5" ]; then
+    meta_d_robotics_dir="$(saha_meta_d_robotics_dir)" || return $?
+  elif [ "$target" = "orangepi-zero3w" ]; then
+    meta_allwinner_dir="$(saha_meta_allwinner_dir "$root_dir")" || return $?
+  fi
 
   mkdir -p "$build_dir" "$downloads_dir" "$sstate_dir"
 
@@ -322,13 +504,18 @@ saha_docker_args() {
     "--user" "$(id -u):$(id -g)" \
     "-e" "USER=builder" \
     "-e" "HOME=/work/home" \
-    "-e" "KAS_BUILD_DIR=/work/build/$target" \
-    "-e" "KAS_WORK_DIR=/work/build/$target" \
+    "-e" "KAS_BUILD_DIR=$container_build_dir" \
+    "-e" "KAS_WORK_DIR=$container_build_dir" \
     "-e" "DL_DIR=/work/downloads" \
     "-e" "SSTATE_DIR=/work/sstate-cache"
 
   printf '%s\n' \
     "-e" "GIT_HTTP_VERSION=${GIT_HTTP_VERSION:-HTTP/1.1}"
+
+  if saha_is_microduck_target "$target"; then
+    # kas still checks out the exact pinned commits; omit unrelated Git history.
+    printf '%s\n' "-e" "KAS_CLONE_DEPTH=1"
+  fi
 
   printf '%s\n' \
     "-e" "GIT_CONFIG_COUNT=1" \
@@ -346,9 +533,17 @@ saha_docker_args() {
 
   printf '%s\n' \
     "-v" "$root_dir:/work/meta-saha" \
-    "-v" "$build_dir:/work/build/$target" \
+    "-v" "$build_dir:$container_build_dir" \
     "-v" "$downloads_dir:/work/downloads" \
-    "-v" "$sstate_dir:/work/sstate-cache" \
+    "-v" "$sstate_dir:/work/sstate-cache"
+
+  if [ "$target" = "rdk-x5" ]; then
+    printf '%s\n' "-v" "$meta_d_robotics_dir:/work/meta-d-robotics:ro"
+  elif [ "$target" = "orangepi-zero3w" ]; then
+    printf '%s\n' "-v" "$meta_allwinner_dir:/work/meta-allwinner:ro"
+  fi
+
+  printf '%s\n' \
     "-w" "/work/meta-saha" \
     "$image"
 }
@@ -358,11 +553,12 @@ saha_run_docker() {
   local target=$2
   local interactive=$3
   shift 3
-  local docker_cmd
+  local docker_args_output docker_cmd
   docker_cmd=(docker)
+  docker_args_output="$(saha_docker_args "$root_dir" "$target" "$interactive")" || return $?
   while IFS= read -r arg; do
     docker_cmd+=("$arg")
-  done < <(saha_docker_args "$root_dir" "$target" "$interactive")
+  done <<< "$docker_args_output"
   docker_cmd+=("$@")
 
   if [ "${SAHA_DRY_RUN:-0}" = "1" ]; then

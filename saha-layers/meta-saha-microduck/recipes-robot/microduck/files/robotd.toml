@@ -1,0 +1,26 @@
+# Generic commissioning defaults. Preserve per-robot calibration in /etc/robot.
+[bus]
+port = "/dev/serial0"
+fast_sync_read = false
+
+[control]
+hz = 50
+
+[policy]
+enabled = false
+# The supported HAT feeds XL330 servos from a regulated 5 V rail.
+voltage_adapt = false
+nominal_voltage = 5.0
+
+[safety]
+# Upstream's empty-pack threshold assumes a 2S battery. A regulated servo
+# rail cannot measure state of charge; retain the other upstream safety gates.
+battery_empty_shutdown = false
+
+[media]
+# The WebRTC control channel remains available before camera qualification.
+source = "test"
+
+[audio]
+enabled = true
+device = "plughw:aic3104"

@@ -1,16 +1,27 @@
 # meta-saha
 
-`meta-saha` is a Yocto Project distro layer and build framework for NVIDIA Jetson systems. The primary workflow builds Jetson Orin and Thor images with kas inside Docker, so the host only needs Docker and does not need kas, bitbake, vcstool, or Yocto build packages installed.
+`meta-saha` is a Yocto Project distro layer and build framework for robot
+systems. It provides a consistent robot image and reusable application stack
+across hardware platforms, sharing common configuration and software while
+keeping vendor BSPs and board-specific policy in separate layers.
 
-The current baseline is Yocto Project 6.0 Wrynose and OE4T `meta-tegra` Wrynose, targeting JetPack 7.2 / L4T R39.2.0.
+The primary workflow builds `saha-image-robot` with kas inside Docker. Target
+configurations select the hardware integration; shared layers provide ROS 2
+or the ROS-free [Microduck runtime](docs/microduck.md), WiFi tooling, and
+optional Home Assistant support. The host does not need kas,
+bitbake, vcstool, or Yocto build packages installed.
 
 ## Supported targets
 
-| Target alias | OE4T `MACHINE` | Hardware |
-| --- | --- | --- |
-| `orin-nx-16g-p3768` | `p3768-0000-p3767-0000` | Jetson Orin NX 16GB module in P3768 carrier |
-| `agx-thor-devkit` | `jetson-agx-thor-devkit` | Jetson AGX Thor devkit |
-| `agx-orin-devkit` | `jetson-agx-orin-devkit` | Jetson AGX Orin devkit |
+| Target alias | `MACHINE` | Hardware guide | Baseline |
+| --- | --- | --- | --- |
+| `orin-nx-16g-p3768` | `p3768-0000-p3767-0000` | [Jetson Orin NX 16GB / P3768](docs/hardware/jetson.md) | Yocto 6.0 Wrynose; OE4T meta-tegra Wrynose; JetPack 7.2 / L4T R39.2.0 |
+| `agx-thor-devkit` | `jetson-agx-thor-devkit` | [Jetson AGX Thor devkit](docs/hardware/jetson.md) | Yocto 6.0 Wrynose; OE4T meta-tegra Wrynose; JetPack 7.2 / L4T R39.2.0 |
+| `agx-orin-devkit` | `jetson-agx-orin-devkit` | [Jetson AGX Orin devkit](docs/hardware/jetson.md) | Yocto 6.0 Wrynose; OE4T meta-tegra Wrynose; JetPack 7.2 / L4T R39.2.0 |
+| `rdk-x5` | `rdk-x5` | [D-Robotics RDK X5](docs/hardware/rdk-x5.md) | Pinned Wrynose; RDKOS 3.5.0 / SDK 1.1.1; Linux 6.1.83 |
+| `iq-9075-evk` | `iq-9075-evk` | [Qualcomm Dragonwing IQ-9075 EVK](docs/hardware/iq9075.md) | Pinned Wrynose / Qualcomm meta-qcom; ROS 2 Jazzy |
+| `radxa-zero-3w` | `radxa-zero-3w` | [Radxa ZERO 3W](docs/hardware/radxa-zero-3w.md) | Pinned Wrynose / upstream meta-rockchip; ROS-free image and software checks passed; hardware qualification pending |
+| `orangepi-zero3w` | `orangepi-zero3w` | [Orange Pi Zero 3W](docs/hardware/orangepi-zero3w.md) | Pinned Wrynose / standalone meta-allwinner; ROS-free image and software checks passed; hardware qualification pending |
 
 List targets with:
 
@@ -18,40 +29,37 @@ List targets with:
 ./scripts/saha-targets
 ```
 
+See [supported hardware](docs/hardware/README.md) for platform prerequisites,
+image variants, artifact formats, flashing, and validation limits.
+
 ## Prerequisites
 
 - Docker with permission to run containers as your user.
-- Enough disk space for a Yocto build. A first build can consume hundreds of GB across build output, downloads, and sstate cache.
-- Network access to fetch Yocto, OpenEmbedded, OE4T, and NVIDIA sources.
+- Enough disk space for a Yocto build. A first build can consume hundreds of GB
+  across build output, downloads, and sstate cache.
+- Network access to fetch upstream sources and any vendor artifacts required
+  by the selected [hardware guide](docs/hardware/README.md).
 
 No host-side Yocto package setup is part of the primary build path.
 
 ## Build
 
-From the `meta-saha` repository root:
+From the `meta-saha` repository root, select an alias from Supported targets:
+
+```bash
+./scripts/saha-build <target>
+```
+
+For example:
 
 ```bash
 ./scripts/saha-build orin-nx-16g-p3768
 ```
 
-Build the other priority targets with:
-
-```bash
-./scripts/saha-build agx-thor-devkit
-./scripts/saha-build agx-orin-devkit
-```
-
-The script builds the Docker builder image, mounts persistent cache directories, then runs:
-
-```bash
-kas build kas/targets/<target>.yml:kas/include/ros-distro-jazzy.yml
-```
-
-`jazzy` is the default ROS 2 distro. Build the same `saha-image-robot` image with ROS 2 Lyrical by setting `SAHA_ROS_DISTRO`:
-
-```bash
-SAHA_ROS_DISTRO=lyrical ./scripts/saha-build orin-nx-16g-p3768
-```
+The script builds the Docker builder image, mounts persistent cache
+directories, then runs the target-specific kas graph. Follow the selected
+[hardware guide](docs/hardware/README.md) for required BSP inputs and supported
+options; not every platform supports every software variant.
 
 ## Output and caches
 
@@ -59,7 +67,7 @@ Default host paths:
 
 | Path | Purpose |
 | --- | --- |
-| `build/<target>/` | Default target-specific kas/bitbake build directory for `SAHA_ROS_DISTRO=jazzy` |
+| `build/<target>/` | Default target-specific kas/bitbake build directory for Jazzy or ROS-free Microduck targets |
 | `build/<target>-ros-<distro>/` | Target-specific kas/bitbake build directory for non-default ROS distros such as `lyrical` |
 | `downloads/` | Shared Yocto download cache |
 | `sstate-cache/` | Shared Yocto sstate cache |
@@ -82,56 +90,9 @@ Generate RPM feed metadata after a build with:
 ./scripts/saha-shell orin-nx-16g-p3768 -c "bitbake package-index"
 ```
 
-For `orin-nx-16g-p3768`, the current tegraflash archive is emitted at:
-
-```text
-build/orin-nx-16g-p3768/tmp/deploy/images/p3768-0000-p3767-0000/saha-image-robot-p3768-0000-p3767-0000.rootfs.tegraflash-tar.zst
-```
-
-For non-default ROS distros, use the distro-specific build directory. For example, `SAHA_ROS_DISTRO=lyrical` emits the Orin NX archive under:
-
-```text
-build/orin-nx-16g-p3768-ros-lyrical/tmp/deploy/images/p3768-0000-p3767-0000/saha-image-robot-p3768-0000-p3767-0000.rootfs.tegraflash-tar.zst
-```
-
-## Flash and first boot access
-
-Unpack the `.tegraflash-tar.zst` archive on an x86-64 Linux host, put the Jetson in recovery mode with the USB OTG port connected, then run `initrd-flash`:
-
-```bash
-mkdir -p ~/scratch/saha-flash
-cd ~/scratch/saha-flash
-tar xf /path/to/saha-image-robot-p3768-0000-p3767-0000.rootfs.tegraflash-tar.zst
-lsusb -d 0955:
-./initrd-flash
-```
-
-After first boot, the hostname is `soybean`. The image includes `l4t-usb-device-mode`, which creates the target-side USB network endpoint at `192.168.55.1` and serves the host side by DHCP. For bring-up, root login is enabled with an empty password:
-
-```bash
-ssh root@192.168.55.1
-```
-
-If USB networking is not enumerated by the host, use the serial console instead, for example:
-
-```bash
-minicom -D /dev/ttyUSB0
-```
-
-Change the empty root password before using the image outside bring-up.
-
-### WiFi on the device
-
-Saha images include NetworkManager with `nmcli` for WiFi setup. USB gadget networking (`l4tbr0`, `192.168.55.1`) stays on systemd-networkd; NetworkManager manages WiFi only.
-
-```bash
-nmcli dev wifi list
-nmcli dev wifi connect "YOUR_SSID" password "YOUR_PASSWORD"
-nmcli dev status
-ip addr show wlan0
-```
-
-If the WiFi interface name is not `wlan0`, use the name shown by `nmcli dev status`.
+Hardware-specific image formats and variant directories are documented in
+the [hardware guides](docs/hardware/README.md). Building produces artifacts;
+flashing is a separate, explicitly selected operation.
 
 Override cache/build locations with environment variables:
 
@@ -217,7 +178,10 @@ This is a fast schema/include/config expansion check. A full `saha-build` still 
 
 ## Home Assistant container
 
-By default, `saha-image-robot` includes Docker, the official Home Assistant container launcher, and a preloaded Home Assistant container image. Disable that stack at build time with:
+`saha-image-robot` can include Docker, the official Home Assistant container
+launcher, and a preloaded Home Assistant container image. Platform defaults
+are listed in the [hardware guides](docs/hardware/README.md). Disable that
+stack at build time with:
 
 ```bash
 SAHA_HOMEASSISTANT=0 ./scripts/saha-build orin-nx-16g-p3768
@@ -243,7 +207,7 @@ docker save ghcr.io/home-assistant/home-assistant:stable -o downloads/homeassist
 ./scripts/saha-build orin-nx-16g-p3768
 ```
 
-The Jetson target needs the `linux/arm64` image. An amd64-only local image is skipped automatically.
+The supported targets need the `linux/arm64` image. An amd64-only local image is skipped automatically.
 
 Disable host Docker reuse during Yocto builds with:
 
@@ -294,17 +258,9 @@ systemctl restart homeassistant-container
 
 `saha-image-robot` includes ROS 2 by default through `ros-base` and `ros2cli-common-extensions`. There is no separate ROS image target; build and flash `saha-image-robot` for the robot rootfs.
 
-Supported ROS 2 distros:
-
-| `SAHA_ROS_DISTRO` | kas include |
-| --- | --- |
-| `jazzy` | `kas/include/ros-distro-jazzy.yml` |
-| `lyrical` | `kas/include/ros-distro-lyrical.yml` |
-
-| `SAHA_HOMEASSISTANT` | Effect |
-| --- | --- |
-| `1` (default) | Include Docker and the preloaded Home Assistant image |
-| `0` | Omit Docker, Home Assistant launcher, and preloaded image |
+Select `SAHA_ROS_DISTRO` only from the combinations supported by the selected
+[hardware guide](docs/hardware/README.md). The default is `jazzy`; unsupported
+combinations are rejected before Docker starts.
 
 After flashing, initialize the ROS environment with:
 
@@ -313,18 +269,32 @@ source /opt/ros/<distro>/setup.sh
 ros2 --help
 ```
 
-## Image scope
+## Device networking
 
-The supported image target is `saha-image-robot`. It is layered on the reusable `saha-image-base` recipe and includes the Jetson BSP base, CUDA runtime libraries, OpenSSH bring-up access, USB device-mode networking support, NetworkManager with `nmcli` for WiFi, the configured ROS 2 runtime and CLI tools, and by default Docker with the official Home Assistant container launcher.
+All Saha robot images use `sahaWorld` as the default static hostname.
+NetworkManager with `nmcli` manages WiFi only; wired and USB networking remain
+under the platform policy documented in the [hardware guides](docs/hardware/README.md).
 
-The image does not include CUDA samples or Jetson GPU container runtime tooling. Add `nvidia-container-toolkit` later through an optional image or kas include if GPU-backed containers are required; OE4T R39.2 removed the old `nvidia-docker` recipe.
+```bash
+nmcli dev wifi list
+nmcli dev wifi connect "YOUR_SSID" password "YOUR_PASSWORD"
+nmcli dev status
+ip addr show wlan0
+```
+
+If the WiFi interface name is not `wlan0`, use the name shown by `nmcli dev status`.
 
 ## Add a target
 
-1. Confirm the machine exists in OE4T `meta-tegra` Wrynose.
-2. Add an alias to `scripts/saha-lib`.
-3. Add `kas/targets/<alias>.yml` with the matching `machine`.
-4. Run:
+1. Confirm the machine exists in the chosen vendor BSP and establish a compatible
+   repository baseline.
+2. Reuse common software from `meta-saha-common`; keep vendor integration in a
+   separate BSP-family layer and reusable kas includes.
+3. Add the alias and machine mapping to `scripts/saha-lib`, then add
+   `kas/targets/<alias>.yml` with the matching `machine` and graph.
+4. Add focused target/configuration tests, a hardware guide under
+   `docs/hardware/`, and a Supported targets row with its baseline and guide link.
+5. Run the framework tests and Docker/kas configuration validation:
 
 ```bash
 bash tests/test-build-framework.sh
@@ -333,7 +303,10 @@ bash tests/test-build-framework.sh
 
 ## Removed legacy flow
 
-The old `resources/*.repos`, `scripts/init.sh`, `setup-env`, `scripts-setup/`, local machine templates, and Xavier NX / `rolling-nx` support have been removed. The supported path is Docker plus kas through `scripts/saha-build`.
+The old vcstool/manual-symlink setup has been removed. The supported path is
+Docker plus kas through `scripts/saha-build`. See the
+[Jetson migration notes](docs/hardware/jetson.md#legacy-migration) for the
+removed entry points and target support.
 
 ## License
 

@@ -1,0 +1,52 @@
+header:
+  version: 17
+  includes:
+    - kas/include/repos-qcom-wrynose.yml
+
+distro: saha-qcom
+
+target:
+  - saha-image-robot
+
+local_conf_header:
+  saha-cache: |
+    DL_DIR ?= "${@os.environ.get('DL_DIR', '${TOPDIR}/downloads')}"
+    SSTATE_DIR ?= "${@os.environ.get('SSTATE_DIR', '${TOPDIR}/sstate-cache')}"
+    TMPDIR ?= "${@os.environ.get('TMPDIR', '${TOPDIR}/tmp')}"
+    BB_HASHSERVE_DB_DIR ?= "${SSTATE_DIR}"
+  saha-build-defaults: |
+    PACKAGE_CLASSES ?= "package_rpm"
+    SDKMACHINE ?= "x86_64"
+    EXTRA_IMAGE_FEATURES ?= "empty-root-password allow-root-login"
+    PATCHRESOLVE = "noop"
+    # Match the upstream QCOM CI disk contract; completed recipe workdirs are
+    # pruned while the shared downloads and sstate caches remain persistent.
+    INHERIT += "rm_work"
+  saha-qcom-mirrors: |
+    # Keep the mirror routes used by the upstream meta-qcom Wrynose CI. They
+    # avoid cloning the very large Qualcomm kernel repository directly from
+    # GitHub while preserving the recipe SRCREV and checksum contract.
+    MIRRORS:append = " \
+      git://github.com git://git.codelinaro.org/clo/yocto-mirrors/github/ \
+      git://.*/ git://git.codelinaro.org/clo/yocto-mirrors/ \
+      https://.*/.*/ https://artifacts.codelinaro.org/codelinaro-le/ \
+    "
+    # The upstream linux-qcom recipe pins an immutable commit but points at
+    # a very large repository. Keep the fixed SRCREV while using BitBake's
+    # supported shallow-fetch path for this recipe only.
+    BB_GIT_SHALLOW:pn-linux-qcom = "1"
+    # The IQ-9075 DSP firmware tag is immutable but hosted in another
+    # repository with a sizeable history. Shallow-fetch that source as well;
+    # the recipe still verifies the pinned tag contents and license files.
+    BB_GIT_SHALLOW:pn-hexagon-dsp-binaries = "1"
+    # Device-side ADB uses five fixed Android source revisions. Fetch only
+    # those revisions rather than their complete upstream histories.
+    BB_GIT_SHALLOW:pn-android-tools = "1"
+  saha-qcom-boot: |
+    # Keep the upstream QCOM recovery/download-mode contract. This only
+    # affects the generated image metadata; it does not access hardware.
+    KERNEL_CMDLINE_EXTRA:append = " qcom_scm.download_mode=1"
+  saha-build-tuning: |
+    BB_NUMBER_THREADS ?= "${@os.environ.get('SAHA_BB_NUMBER_THREADS', '4')}"
+    BB_NUMBER_PARSE_THREADS ?= "${@os.environ.get('SAHA_BB_NUMBER_PARSE_THREADS', '4')}"
+    PARALLEL_MAKE ?= "${@os.environ.get('SAHA_PARALLEL_MAKE', '-j 4')}"
