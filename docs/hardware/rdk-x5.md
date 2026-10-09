@@ -159,8 +159,9 @@ USB gadget interfaces stay on systemd-networkd. See the shared
 The isolated `meta-rdk-x5-saha` layer supplies `saha-image-robot`. It includes
 the RDK X5 kernel/DTBs, RDKOS-compatible `boot.scr`, fixed `CONFIG` partition,
 OpenSSH bring-up access, NetworkManager with `nmcli` for WiFi, deterministic
-systemd-networkd policies for the non-WiFi interfaces, core robot tools, and
-the pinned dora-rs CLI via `packagegroup-saha-rdk-x5-dora`. The ROS 2 Jazzy
+systemd-networkd policies for the non-WiFi interfaces, core robot tools,
+the pinned dora-rs CLI via `packagegroup-saha-rdk-x5-dora`, and on-target
+`rust`/`cargo` via `packagegroup-saha-rdk-x5-devtool`. The ROS 2 Jazzy
 packagegroup recipe remains in-tree for optional use, but the default image
 does not install it. It intentionally does not flash a replacement bootloader.
 `SAHA_X5_ACCELERATORS=1` adds only the pinned accelerator packagegroups through

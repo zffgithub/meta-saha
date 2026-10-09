@@ -51,7 +51,8 @@ validate_device() {
   [ "$device_type" = "disk" ] ||
     die "device must be a whole disk, not ${device_type:-an unknown type}: ${DEVICE}"
 
-  removable="$(lsblk -dn -o RM "$DEVICE")"
+  # Use raw mode (-r): padded " 1" fails a strict equality check against "1".
+  removable="$(lsblk -dnr -o RM "$DEVICE")"
   [ "$removable" = "1" ] ||
     die "device is not reported as removable (RM=1): ${DEVICE}"
 
