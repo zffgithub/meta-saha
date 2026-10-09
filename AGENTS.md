@@ -17,8 +17,12 @@ shared ROS-free Microduck layer and separate BSP graphs.
 - **Build entry point:** `./scripts/saha-build <target>`.
 - **Qualcomm target:** `./scripts/saha-build iq-9075-evk` (ROS 2 Jazzy only).
 - **List supported targets:** `./scripts/saha-targets`.
-- **Focused checks:** `bash tests/test-build-framework.sh` and
-  `bash tests/test-flash-rdk-x5.sh`.
+- **Focused checks:** `bash tests/test-build-framework.sh`,
+  `bash tests/test-flash-rdk-x5.sh`, and
+  `bash tests/test-rdk-x5-iface-checklist.sh`.
+- **RDK X5 on-target interfaces:** checklist
+  `tests/rdk-x5-iface-checklist.md`; board helper
+  `bash tests/check-rdk-x5-iface.sh` (run as root on the board).
 
 For a real build, use a supported alias such as:
 

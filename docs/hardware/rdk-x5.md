@@ -132,6 +132,20 @@ RDKOS 3.5.0's vendor 6.1.83 kernel is incompatible with Wrynose's optional
 `lttng-tools` ptest package; regular LTTng userspace and ROS 2 tracing
 dependencies remain available, while kernel LTTng-module tests are excluded.
 
+## Board interface checklist
+
+After first boot over USB gadget (`ssh root@192.168.128.10`), use the on-target
+interface checklist and helper under `tests/`:
+
+- Checklist: [rdk-x5-iface-checklist.md](../../tests/rdk-x5-iface-checklist.md)
+- Helper (run as root on the board): `bash tests/check-rdk-x5-iface.sh`
+- Contract test: `bash tests/test-rdk-x5-iface-checklist.sh`
+
+Phase A enumerates storage, USB gadget, Ethernet, Wi-Fi, Bluetooth, USB host,
+HDMI/DRM, audio, CAN, I2C/SPI/UART, GPIO/PWM, MIPI nodes, RTC, and SSH. Phase B
+covers accessory-backed checks when a cable, stick, display, or Wi-Fi
+credentials are available.
+
 ## Network policy
 
 NetworkManager manages WiFi only. Onboard Ethernet, USB host adapters, and
