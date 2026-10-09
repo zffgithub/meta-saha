@@ -59,9 +59,11 @@ control commands. A nonzero exit and `BPU_SMOKE_FAIL stage=...` identify the
 failed runtime stage. The base RDK X5 image deliberately does not include this
 command, the DNN runtime, or the BPU driver.
 
-The target uses `kas/targets/rdk-x5.yml` with pinned ROS 2 Jazzy.
-`SAHA_ROS_DISTRO=lyrical` is rejected to prevent an unverified ROS/BSP
-combination. Home Assistant is disabled by default; see the shared
+The target uses `kas/targets/rdk-x5.yml` with the ROS 2 Jazzy layer graph
+still available for optional recipes. The default image installs
+`packagegroup-saha-rdk-x5-dora` (pinned `dora-cli`) and does **not** install
+`packagegroup-saha-rdk-x5-ros2`. `SAHA_ROS_DISTRO=lyrical` is rejected.
+Home Assistant is disabled by default; see the shared
 [container instructions](../../README.md#home-assistant-container).
 
 For RDK X5, keep the BSP location explicit when overriding paths:
@@ -129,8 +131,8 @@ and boot contract are identical to the base RDK X5 image.
 
 RDKOS 3.5.0's vendor 6.1.83 kernel is incompatible with Wrynose's optional
 `lttng-modules` ptest dependency. The RDK X5 layer therefore disables only the
-`lttng-tools` ptest package; regular LTTng userspace and ROS 2 tracing
-dependencies remain available, while kernel LTTng-module tests are excluded.
+`lttng-tools` ptest package; regular LTTng userspace remains available, while
+kernel LTTng-module tests are excluded.
 
 ## Board interface checklist
 
@@ -158,7 +160,9 @@ The isolated `meta-rdk-x5-saha` layer supplies `saha-image-robot`. It includes
 the RDK X5 kernel/DTBs, RDKOS-compatible `boot.scr`, fixed `CONFIG` partition,
 OpenSSH bring-up access, NetworkManager with `nmcli` for WiFi, deterministic
 systemd-networkd policies for the non-WiFi interfaces, core robot tools, and
-the verified Jazzy ROS 2 runtime. It intentionally does not ship or flash a
-replacement bootloader. `SAHA_X5_ACCELERATORS=1` adds only the pinned
-accelerator packagegroups through a separate kas include; it is rejected for
-Jetson and IQ-9075 targets and does not alter the default RDK X5 image.
+the pinned dora-rs CLI via `packagegroup-saha-rdk-x5-dora`. The ROS 2 Jazzy
+packagegroup recipe remains in-tree for optional use, but the default image
+does not install it. It intentionally does not flash a replacement bootloader.
+`SAHA_X5_ACCELERATORS=1` adds only the pinned accelerator packagegroups through
+a separate kas include; it is rejected for Jetson and IQ-9075 targets and does
+not alter the default RDK X5 image.

@@ -617,8 +617,11 @@ grep -qxF 'WKS_FILE = "rdk-x5.wks.in"' "$RDK_IMAGE" ||
   fail "RDK X5 image must select its WIC layout"
 grep -qxF 'WKS_FILE_DEPENDS = "${WKS_FILE_DEPENDS_DEFAULT} d-robotics-bootfiles"' "$RDK_IMAGE" ||
   fail "RDK X5 image must preserve WIC tools and deploy boot assets before WIC"
-grep -q 'packagegroup-saha-rdk-x5-ros2' "$RDK_IMAGE" ||
-  fail "RDK X5 image must install its ROS 2 runtime packagegroup"
+grep -qxF 'CORE_IMAGE_BASE_INSTALL += "packagegroup-saha-rdk-x5-dora"' "$RDK_IMAGE" ||
+  fail "RDK X5 image must install its dora-rs packagegroup"
+if grep -Eq 'packagegroup-saha-rdk-x5-ros2|packagegroup-saha-ros2' "$RDK_IMAGE"; then
+  fail "default RDK X5 image must not install the ROS 2 packagegroup"
+fi
 RDK_LTTNG_APPEND="$RDK_LAYER/recipes-kernel/lttng/lttng-tools_%.bbappend"
 [ -f "$RDK_LTTNG_APPEND" ] || fail "RDK X5 must carry its LTTng compatibility override"
 grep -qxF 'PTEST_ENABLED:pn-lttng-tools = "0"' "$RDK_LTTNG_APPEND" ||
@@ -637,9 +640,21 @@ if rg -n --fixed-strings '/home/' "$RDK_LAYER" "$RDK_REPOS" "$RDK_BASE" "$RDK_TA
 fi
 
 RDK_ROS_PACKAGEGROUP="$RDK_LAYER/recipes-saha/packagegroups/packagegroup-saha-rdk-x5-ros2.bb"
+RDK_DORA_PACKAGEGROUP="$RDK_LAYER/recipes-saha/packagegroups/packagegroup-saha-rdk-x5-dora.bb"
+RDK_DORA_CLI="$RDK_LAYER/recipes-saha/dora/dora-cli_1.1.0.bb"
 [ -f "$RDK_ROS_PACKAGEGROUP" ] || fail "RDK X5 ROS 2 packagegroup must exist"
 grep -qxF 'RDEPENDS:${PN} = "packagegroup-saha-ros2"' "$RDK_ROS_PACKAGEGROUP" ||
   fail "RDK X5 ROS 2 packagegroup must reuse the shared ROS 2 packagegroup"
+[ -f "$RDK_DORA_PACKAGEGROUP" ] || fail "RDK X5 dora-rs packagegroup must exist"
+[ -f "$RDK_DORA_CLI" ] || fail "RDK X5 dora-cli recipe must exist"
+grep -qxF '    dora-cli \' "$RDK_DORA_PACKAGEGROUP" ||
+  fail "RDK X5 dora packagegroup must install dora-cli"
+grep -q 'dora-cli-aarch64-unknown-linux-gnu.tar.gz' "$RDK_DORA_CLI" ||
+  fail "RDK X5 dora-cli must use the pinned aarch64 release archive"
+grep -qxF 'COMPATIBLE_HOST = "aarch64.*-linux"' "$RDK_DORA_CLI" ||
+  fail "RDK X5 dora-cli must stay aarch64-only"
+grep -Eq 'ros-common-layer|ros2-layer|ros2-jazzy-layer' "$RDK_LAYER/conf/layer.conf" ||
+  fail "RDK X5 layer must keep meta-ros collections available for optional ROS recipes"
 
 grep -A2 '^target:$' "$ROOT_DIR/kas/include/base.yml" |
   grep -qxF '  - saha-image-robot' ||
