@@ -22,8 +22,14 @@ PACKAGE_ARCH = "${TUNE_PKGARCH}"
 RDEPENDS:${PN} = "libgcc"
 INSANE_SKIP:${PN} += "already-stripped ldflags"
 
+# do_unpack is a Python task; append must be Python too.
 do_unpack:append() {
-    cp -f ${UNPACKDIR}/LICENSE ${S}/LICENSE
+    import os
+    import shutil
+    shutil.copy2(
+        os.path.join(d.getVar("UNPACKDIR"), "LICENSE"),
+        os.path.join(d.getVar("S"), "LICENSE"),
+    )
 }
 
 do_install() {
