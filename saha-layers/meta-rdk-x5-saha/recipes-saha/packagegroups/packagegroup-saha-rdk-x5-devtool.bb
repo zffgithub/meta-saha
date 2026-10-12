@@ -3,9 +3,18 @@ LICENSE = "MIT"
 
 inherit packagegroup
 
-# Target rustc/cargo from OE-Core (same set as packagegroup-rust-sdk-target).
-# Intended for board-side cargo builds such as dora e2e; not for SDK nativesdk.
+# Target rustc/cargo plus the host-side deps needed for board-side cargo builds
+# (e.g. dora e2e). perl is required by openssl-sys Configure; buildessential
+# provides gcc/g++/make/pkgconfig; openssl-dev avoids rebuilding OpenSSL from
+# crates when pkg-config can find the system library.
 RDEPENDS:${PN} = " \
     rust \
     cargo \
+    packagegroup-core-buildessential \
+    perl \
+    openssl \
+    openssl-dev \
+    pkgconfig \
+    cmake \
+    git \
 "
